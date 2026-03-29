@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-DEFAULT_OUTPUT="$HOME/tmp/dev"
+DEFAULT_OUTPUT="."
 REPO_PATH="."
-OUTPUT_DIR="$DEFAULT_OUTPUT"
+OUTPUT_DIR="${DEFAULT_OUTPUT}"
 INCLUDE_SUBMODULES=false
 NO_COMPRESS=false
 usage() {
@@ -20,7 +20,7 @@ USAGE
 }
 parse_args() {
 	parsed=$(getopt -o "r:o:sh" --long "repo:,output:,submodules,no-compress,help" -n "git-bundle" -- "$@")
-	eval set -- "$parsed"
+	eval set -- "${parsed}"
 	while true; do
 		case "$1" in
 		-r | --repo)
@@ -62,25 +62,28 @@ validate_repo() {
 	fi
 }
 validate_output_dir() {
-	if [[ ! -d $OUTPUT_DIR ]]; then
-		echo "Error: Output directory does not exist: $OUTPUT_DIR" >&2
+	if [[ ! -d ${OUTPUT_DIR} ]]; then
+		echo "Error: Output directory does not exist: ${OUTPUT_DIR}" >&2
 		exit 1
 	fi
 }
 get_repo_name() {
 	local name
 	name=$(git -C "$1" config --get remote.origin.url 2>/dev/null | sed 's/.*\///' | sed 's/\.git$//' || true)
-	[[ -z $name ]] && name=$(basename "$(cd "$1" && pwd)")
-	echo "$name"
+	if [[ -z ${name} ]]; then
+		name=$(basename "$(cd "$1" && pwd)")
+	fi
+	echo "${name}"
 }
 get_timestamp() { date '+%Y-%m-%d_%H-%M-%S'; }
 create_bundle() {
 	git -C "$1" bundle create "$2" --all
-	if [[ $INCLUDE_SUBMODULES == true ]]; then
+	if [[ ${INCLUDE_SUBMODULES} == true ]]; then
 		while IFS= read -r submodule_path; do
-			[[ -z $submodule_path ]] && continue
-			local sub_bundle="${2%.bundle}_$(basename "$submodule_path").bundle"
-			git -C "$1/$submodule_path" bundle create "$sub_bundle" --all
+			[[ -z ${submodule_path} ]] && continue
+			local sub_bundle
+			sub_bundle="${2%.bundle}_$(basename "${submodule_path}").bundle"
+			git -C "$1/${submodule_path}" bundle create "${sub_bundle}" --all
 		done < <(git -C "$1" config --file .gitmodules --get-regexp path 2>/dev/null | awk '{print $2}' || true)
 	fi
 }
@@ -90,15 +93,17 @@ compress_bundle() {
 }
 main() {
 	parse_args "$@"
-	REPO_PATH=$(cd "$REPO_PATH" && pwd)
-	validate_repo "$REPO_PATH"
+	REPO_PATH=$(cd "${REPO_PATH}" && pwd)
+	validate_repo "${REPO_PATH}"
 	validate_output_dir
-	local repo_name=$(get_repo_name "$REPO_PATH")
-	local timestamp=$(get_timestamp)
+	local repo_name
+	repo_name=$(get_repo_name "${REPO_PATH}")
+	local timestamp
+	timestamp=$(get_timestamp)
 	local bundle_path="${OUTPUT_DIR}/${repo_name}_${timestamp}.bundle"
-	echo "Creating bundle for: $repo_name"
-	create_bundle "$REPO_PATH" "$bundle_path"
-	[[ $NO_COMPRESS == false ]] && bundle_path=$(compress_bundle "$bundle_path")
-	echo "Bundle created: $bundle_path"
+	echo "Creating bundle for: ${repo_name}"
+	create_bundle "${REPO_PATH}" "${bundle_path}"
+	[[ ${NO_COMPRESS} == false ]] && bundle_path=$(compress_bundle "${bundle_path}")
+	echo "Bundle created: ${bundle_path}"
 }
 main "$@"
